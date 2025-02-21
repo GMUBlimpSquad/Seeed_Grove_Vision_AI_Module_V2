@@ -36,8 +36,10 @@
 #include "cisdp_cfg.h"
 #include "memory_manage.h"
 #include <send_result.h>
+#include "hx_drv_iic.h"
+#include "i2c_comm.h"
 
-#define CHANGE_YOLOV8_OB_OUPUT_SHAPE 1
+#define CHANGE_YOLOV8_OB_OUPUT_SHAPE 0
 
 
 #define INPUT_IMAGE_CHANNELS 3
@@ -147,6 +149,63 @@ static int _arm_npu_init(bool security_enable, bool privilege_enable)
     return 0;
 }
 
+// Convert YUV420 (YUV420p) image to RGB and rescale it using nearest-neighbor interpolation.
+void YUV420ToRGBRescaled(const uint8_t* yuv, uint8_t* rgb,
+                           int inWidth, int inHeight,
+                           int outWidth, int outHeight) {
+    // Calculate sizes for Y, U, and V planes.
+    int frameSize = inWidth * inHeight;
+    int chromaSize = frameSize / 4; // U and V each are 1/4 size of Y.
+
+    // Pointers to each plane in the YUV420 buffer.
+    const uint8_t* yPlane = yuv;
+    const uint8_t* uPlane = yuv + frameSize;
+    const uint8_t* vPlane = yuv + frameSize + chromaSize;
+
+    // Compute scaling factors for width and height.
+    float scaleX = static_cast<float>(inWidth) / outWidth;
+    float scaleY = static_cast<float>(inHeight) / outHeight;
+
+    // Loop over each output pixel.
+    for (int j = 0; j < outHeight; j++) {
+        for (int i = 0; i < outWidth; i++) {
+            // Find the corresponding source pixel (nearest neighbor).
+            int srcX = static_cast<int>(i * scaleX);
+            int srcY = static_cast<int>(j * scaleY);
+            // Ensure coordinates are within bounds.
+            if (srcX >= inWidth)  srcX = inWidth - 1;
+            if (srcY >= inHeight) srcY = inHeight - 1;
+
+            // Calculate indices into the Y plane.
+            int yIndex = srcY * inWidth + srcX;
+            // For U and V planes, since they are subsampled by 2, use integer division.
+            int uvIndex = (srcY / 2) * (inWidth / 2) + (srcX / 2);
+
+            int Y = yPlane[yIndex];
+            int U = uPlane[uvIndex];
+            int V = vPlane[uvIndex];
+
+            // Convert YUV to RGB using BT.601 integer math.
+            int C = Y - 16;
+            int D = U - 128;
+            int E = V - 128;
+            int R = (298 * C + 409 * E + 128) >> 8;
+            int G = (298 * C - 100 * D - 208 * E + 128) >> 8;
+            int B = (298 * C + 516 * D + 128) >> 8;
+
+            // Clamp each channel to [0, 255].
+            if (R < 0) R = 0; else if (R > 255) R = 255;
+            if (G < 0) G = 0; else if (G > 255) G = 255;
+            if (B < 0) B = 0; else if (B > 255) B = 255;
+
+            // Calculate the output pixel index.
+            int outIndex = (j * outWidth + i) * 3;
+            rgb[outIndex + 0] = static_cast<uint8_t>(R);
+            rgb[outIndex + 1] = static_cast<uint8_t>(G);
+            rgb[outIndex + 2] = static_cast<uint8_t>(B);
+        }
+    }
+}
 
 int cv_yolov8n_ob_init(bool security_enable, bool privilege_enable, uint32_t model_addr) {
 	int ercode = 0;
@@ -259,7 +318,7 @@ static void  yolov8_NMSBoxes(std::vector<box> &boxes,std::vector<float> &confide
 
 
 #if CHANGE_YOLOV8_OB_OUPUT_SHAPE
-static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpreter,float modelScoreThreshold, float modelNMSThreshold, struct_yolov8_ob_algoResult *alg,	std::forward_list<el_box_t> &el_algo)
+static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpreter,float modelScoreThreshold, float modelNMSThreshold, struct_yolov8_ob_algoResult *alg,std::forward_list<el_box_t> &el_algo)
 {
 	uint32_t img_w = app_get_raw_width();
     uint32_t img_h = app_get_raw_height();
@@ -410,7 +469,7 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 	}
 }
 #else
-static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpreter,float modelScoreThreshold, float modelNMSThreshold, struct_yolov8_ob_algoResult *alg)
+static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpreter,float modelScoreThreshold, float modelNMSThreshold, struct_yolov8_ob_algoResult *alg,std::forward_list<el_box_t> &el_algo)
 {
 	uint32_t img_w = app_get_raw_width();
     uint32_t img_h = app_get_raw_height();
@@ -524,6 +583,14 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 		alg->obr[i].bbox.width = (uint32_t)(boxes[idx].w * scale_factor_w);
 		alg->obr[i].bbox.height = (uint32_t)(boxes[idx].h * scale_factor_h);
 		alg->obr[i].class_idx = class_idxs[idx];
+		el_box_t temp_el_box;
+		temp_el_box.score =  confidences[idx]*100;
+		temp_el_box.target =  class_idxs[idx];
+		temp_el_box.x = (uint32_t)(boxes[idx].x* scale_factor_w);
+		temp_el_box.y =  (uint32_t)(boxes[idx].y* scale_factor_h);
+		temp_el_box.w = (uint32_t)(boxes[idx].w *scale_factor_w);
+		temp_el_box.h = (uint32_t)(boxes[idx].h *scale_factor_h);
+		el_algo.emplace_front(temp_el_box);
 		#if YOLOV8N_OB_DBG_APP_LOG
 			printf("detect object[%d]: %s confidences: %f\r\n",i, coco_classes[class_idxs[idx]].c_str(),confidences[idx]);
 
@@ -532,6 +599,14 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 }
 
 #endif
+
+void callback_i2c(void){
+	xprintf("I2C complete");
+}
+
+void callback_i2c_error(void){
+	xprintf("I2C error");
+}
 
 int cv_yolov8n_ob_run(struct_yolov8_ob_algoResult *algoresult_yolov8n_ob) {
 	int ercode = 0;
@@ -559,10 +634,12 @@ int cv_yolov8n_ob_run(struct_yolov8_ob_algoResult *algoresult_yolov8n_ob) {
 		w_scale = (float)(img_w - 1) / (YOLOV8_OB_INPUT_TENSOR_WIDTH - 1);
 		h_scale = (float)(img_h - 1) / (YOLOV8_OB_INPUT_TENSOR_HEIGHT - 1);
 
-		
-		hx_lib_image_resize_BGR8U3C_to_RGB24_helium((uint8_t*)raw_addr, (uint8_t*)yolov8n_ob_input->data.data,  
-		                    img_w, img_h, ch, 
-                        	YOLOV8_OB_INPUT_TENSOR_WIDTH, YOLOV8_OB_INPUT_TENSOR_HEIGHT, w_scale,h_scale);
+		// hx_lib_image_resize_BGR8U3C_to_RGB24_helium((uint8_t*)raw_addr, (uint8_t*)yolov8n_ob_input->data.data,
+		// hx_lib_image_resize_helium((uint8_t*)raw_addr, (uint8_t*)yolov8n_ob_input->data.data,
+		// hx_lib_image_rescale_helium((uint8_t*)raw_addr, (uint8_t*)yolov8n_ob_input->data.data,
+		                    // img_w, img_h, ch,
+                        	// YOLOV8_OB_INPUT_TENSOR_WIDTH, YOLOV8_OB_INPUT_TENSOR_HEIGHT, w_scale,h_scale);
+		YUV420ToRGBRescaled((uint8_t*)raw_addr, (uint8_t*)yolov8n_ob_input->data.data,img_w, img_h,YOLOV8_OB_INPUT_TENSOR_WIDTH, YOLOV8_OB_INPUT_TENSOR_HEIGHT);
 		#ifdef EACH_STEP_TICK						
 			SystemGetTick(&systick_2, &loop_cnt_2);
 			dbg_printf(DBG_LESS_INFO,"Tick for resize image BGR8U3C_to_RGB24_helium for yolov8 OB:[%d]\r\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));							
@@ -609,7 +686,7 @@ int cv_yolov8n_ob_run(struct_yolov8_ob_algoResult *algoresult_yolov8n_ob) {
 			SystemGetTick(&systick_1, &loop_cnt_1);
 		#endif
 		//retrieve output data
-		yolov8_ob_post_processing(yolov8n_ob_int_ptr,0.25, 0.45, algoresult_yolov8n_ob,el_algo);
+		yolov8_ob_post_processing(yolov8n_ob_int_ptr,0.5, 0.45, algoresult_yolov8n_ob,el_algo);
 		#ifdef EACH_STEP_TICK
 			SystemGetTick(&systick_2, &loop_cnt_2);
 			dbg_printf(DBG_LESS_INFO,"Tick for Invoke for YOLOV8_OB_post_processing:[%d]\r\n\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));    
@@ -622,8 +699,22 @@ int cv_yolov8n_ob_run(struct_yolov8_ob_algoResult *algoresult_yolov8n_ob) {
 			// dbg_printf(DBG_LESS_INFO,"Tick for TOTAL YOLOV8 OB:[%d]\r\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));		
 		#endif
 
-    }
-	
+	}
+
+// 	I2CCOMM_CFG_T i2c_cfg = {
+//     .slv_addr = 0x50,   // Set the slave address (example)
+//     .write_cb = NULL,    // No callback for write
+//     .read_cb = NULL,     // No callback for read
+//     .err_cb = NULL,      // No callback for errors
+//     .sta_cb = NULL       // No callback for status changes
+// };
+    xprintf("Initializing I2c");
+
+	// hx_drv_i2cs_init(USE_DW_IIC_SLV_0, 0x50);
+	// hx_drv_i2cs_set_err_cb(USE_DW_IIC_SLV_0,(void*)callback_i2c_error);
+	std::string str = box_results_2_json_str(el_algo);
+	std::vector<unsigned char> ucharArray(str.begin(), str.end());
+	hx_drv_i2cs_interrupt_write(USE_DW_IIC_SLV_0,0x50,ucharArray.data(),box_results_2_json_str(el_algo).size(),(void*)callback_i2c);
 
 #ifdef UART_SEND_ALOGO_RESEULT
 	algoresult_yolov8n_ob->algo_tick = (loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2) + capture_image_tick;

@@ -152,8 +152,8 @@ CUSTOMER ?= seeed
 # tflm_peoplenet
 # tflm_yolo11_od
 ##
-APP_TYPE = allon_sensor_tflm
- 
+APP_TYPE = tflm_yolov8_od
+
 ### Options above must be added before include options.mk ###
 override EPII_ROOT := $(strip $(subst \,/,$(EPII_ROOT)))
 include $(EPII_ROOT)/options/options.mk

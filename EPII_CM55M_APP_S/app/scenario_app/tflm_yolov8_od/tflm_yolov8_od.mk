@@ -7,6 +7,7 @@ APPL_DEFINES += -DEVT_DATAPATH
 APPL_DEFINES += -DUART_SEND_ALOGO_RESEULT
 #APPL_DEFINES += -DEVT_CM55MTIMER -DEVT_CM55MMB
 APPL_DEFINES += -DDBG_MORE
+# APPL_DEFINES += -DLIB_I2C_COMM
 
 EVENTHANDLER_SUPPORT = event_handler
 EVENTHANDLER_SUPPORT_LIST += evt_datapath
@@ -17,7 +18,7 @@ EVENTHANDLER_SUPPORT_LIST += evt_datapath
 # The source code should be loacted in ~\library\{lib_name}\
 ##
 # LIB_SEL = pwrmgmt sensordp tflmtag2209_u55tag2205 spi_ptl spi_eeprom hxevent img_proc
-LIB_SEL = pwrmgmt sensordp tflmtag2412_u55tag2411 spi_ptl spi_eeprom hxevent img_proc
+LIB_SEL = pwrmgmt sensordp tflmtag2412_u55tag2411 spi_ptl spi_eeprom hxevent img_proc i2c_comm
 
 ##
 # middleware support feature
@@ -35,8 +36,10 @@ override EPII_USECASE_SEL := drv_user_defined
 
 CIS_SUPPORT_INAPP = cis_sensor
 #CIS_SUPPORT_INAPP_MODEL = cis_hm0360
-CIS_SUPPORT_INAPP_MODEL = cis_ov5647
+# CIS_SUPPORT_INAPP_MODEL = cis_ov5647
 #CIS_SUPPORT_INAPP_MODEL = cis_imx219
+CIS_SUPPORT_INAPP_MODEL = cis_imx708
+
 
 ifeq ($(CIS_SUPPORT_INAPP_MODEL), cis_imx219)
 APPL_DEFINES += -DCIS_IMX

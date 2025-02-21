@@ -5,12 +5,13 @@
 #include <string.h>
 #include <stdlib.h>
 #include "powermode_export.h"
-
+#include "hx_drv_iic.h"
 
 
 
 // #define WATCH_DOG_TIMEOUT_TH	(20000) //ms
 #define WATCH_DOG_TIMEOUT_TH	(500) //ms
+#define FRAME_CHECK_DEBUG
 
 #ifdef TRUSTZONE_SEC
 #ifdef FREERTOS
@@ -132,6 +133,13 @@ void spi_m_pinmux_cfg(SCU_PINMUX_CFG_T *pinmux_cfg)
 }
 #endif
 
+/* Init I2C slave 0 pin mux to PA2, PA3 (SCL, SDA)*/
+void i2cs0_pinmux_cfg(SCU_PINMUX_CFG_T *pinmux_cfg)
+{
+	pinmux_cfg->pin_pa2 = SCU_PA2_PINMUX_SB_I2C_S_SCL_0;    /*!< pin PA2*/
+	pinmux_cfg->pin_pa3 = SCU_PA3_PINMUX_SB_I2C_S_SDA_0;    /*!< pin PA3*/
+}
+
 /*******************************************************************************
  * Code
  ******************************************************************************/
@@ -143,7 +151,7 @@ void pinmux_init()
 
 	/* Init SPI master pin mux (share with SDIO) */
 	spi_m_pinmux_cfg(&pinmux_cfg);
-
+i2cs0_pinmux_cfg(&pinmux_cfg);
 	hx_drv_scu_set_all_pinmux_cfg(&pinmux_cfg, 1);
 }
 
@@ -942,6 +950,12 @@ void model_change() {
 	}
 #endif
 }
+
+void callback_i2c_error(void){
+	xprintf("I2C error");
+}
+
+
 /*******************************************************************************
  * Code
  ******************************************************************************/
@@ -975,6 +989,9 @@ int tflm_yolov8_od_app(void) {
     //hx_lib_spi_eeprom_open_speed(USE_DW_SPI_MST_Q, 6000000);
 
 	hx_lib_spi_eeprom_enable_XIP(USE_DW_SPI_MST_Q, true, FLASH_QUAD, true);
+
+	hx_drv_i2cs_init(USE_DW_IIC_SLV_0, 0x50);
+	hx_drv_i2cs_set_err_cb(USE_DW_IIC_SLV_0,(void*)callback_i2c_error);
 
 	//
 // #ifdef WATCHDOG_VERSION
