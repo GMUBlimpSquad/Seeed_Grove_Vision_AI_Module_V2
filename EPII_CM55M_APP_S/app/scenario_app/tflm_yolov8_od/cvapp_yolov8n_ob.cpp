@@ -44,7 +44,7 @@
 
 #define INPUT_IMAGE_CHANNELS 3
 
-#if 1
+#if 0
 #define YOLOV8_OB_INPUT_TENSOR_WIDTH   192
 #define YOLOV8_OB_INPUT_TENSOR_HEIGHT  192
 #define YOLOV8_OB_INPUT_TENSOR_CHANNEL INPUT_IMAGE_CHANNELS
@@ -79,7 +79,7 @@ using namespace std;
 
 namespace {
 
-constexpr int tensor_arena_size = 1053*1024;
+constexpr int tensor_arena_size = 1363*1024;
 
 static uint32_t tensor_arena=0;
 
@@ -129,7 +129,7 @@ static int _arm_npu_init(bool security_enable, bool privilege_enable)
     /* Initialise Ethos-U55 device */
 #if TFLM2209_U55TAG2205
 	const void * ethosu_base_address = (void *)(U55_BASE);
-#else 
+#else
 	void * const ethosu_base_address = (void *)(U55_BASE);
 #endif
 
@@ -246,8 +246,8 @@ int cv_yolov8n_ob_init(bool security_enable, bool privilege_enable, uint32_t mod
 					(uint8_t*)tensor_arena, tensor_arena_size, &yolov8n_ob_micro_error_reporter);
 		#else
 			static tflite::MicroInterpreter yolov8n_ob_static_interpreter(yolov8n_ob_model, yolov8n_ob_op_resolver,
-					(uint8_t*)tensor_arena, tensor_arena_size);  
-		#endif  
+					(uint8_t*)tensor_arena, tensor_arena_size);
+		#endif
 
 
 		if(yolov8n_ob_static_interpreter.AllocateTensors()!= kTfLiteOk) {
@@ -298,7 +298,7 @@ static void  yolov8_NMSBoxes(std::vector<box> &boxes,std::vector<float> &confide
         {
             continue;
         }
-        
+
         nms_result.push_back(yolov8_bboxes[k].index);
         for(int j = k + 1; j < updated_size; j++)
         {
@@ -324,7 +324,7 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
     uint32_t img_h = app_get_raw_height();
 	TfLiteTensor* output = static_interpreter->output(0);
 	TfLiteTensor* output_2 = static_interpreter->output(1);
-	// init postprocessing 	
+	// init postprocessing
 	int num_classes = output_2->dims->data[2];
 
 	#if YOLOV8N_OB_DBG_APP_LOG
@@ -364,18 +364,18 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 	#endif
 	/***
 	 * dequantize the output result for box
-	 * 
-	 * 
+	 *
+	 *
 	 ******/
 	for(int dims_cnt_2 = 0; dims_cnt_2 < output->dims->data[2]; dims_cnt_2++)//// output->dims->data[2] is 756
 	{
 		float outputs_bbox_data[4];
 		float maxScore = (-1);// the first four indexes are bbox information
 		uint16_t maxClassIndex = 0;
-		for(int dims_cnt_1 = 0; dims_cnt_1 < output->dims->data[1]; dims_cnt_1++)// output->dims->data[1] is 4 
+		for(int dims_cnt_1 = 0; dims_cnt_1 < output->dims->data[1]; dims_cnt_1++)// output->dims->data[1] is 4
 		{
 			int value =  output->data.int8[ dims_cnt_2 + dims_cnt_1 * output->dims->data[2]];
-			
+
 			float deq_value = ((float) value-(float)output_zeropoint) * output_scale ;
 
 			/***
@@ -395,7 +395,7 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 		for(int output_2_dims_cnt_1 = 0; output_2_dims_cnt_1 < output_2->dims->data[2]; output_2_dims_cnt_1++)//output_2->dims->data[2] is 80
 		{
 			int value_2 =  output_2->data.int8[ output_2_dims_cnt_1 + dims_cnt_2 * output_2->dims->data[2]];
-			
+
 			float deq_value_2 = ((float) value_2-(float)output_2_zeropoint) * output_2_scale ;
 			/***
 			 * find maximum Score and correspond Class idx
@@ -409,7 +409,7 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 		if (maxScore >= modelScoreThreshold)
 		{
 			box bbox;
-			
+
 			bbox.x = (outputs_bbox_data[0] - (0.5 * outputs_bbox_data[2]));
 			bbox.y = (outputs_bbox_data[1] - (0.5 * outputs_bbox_data[3]));
 			bbox.w =(outputs_bbox_data[2]);
@@ -417,17 +417,17 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 			boxes.push_back(bbox);
 			class_idxs.push_back(maxClassIndex);
 			confidences.push_back(maxScore);
-			
+
 		}
 	}
 
-	
+
 	#if YOLOV8N_OB_DBG_APP_LOG
 		xprintf("boxes.size(): %d\r\n",boxes.size());
 	#endif
 	/**
 	 * do nms
-	 * 
+	 *
 	 * **/
 
 	std::vector<int> nms_result;
@@ -440,8 +440,8 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 		if(!(MAX_TRACKED_YOLOV8_ALGO_RES-i))break;
 		int idx = nms_result[i];
 
-		float scale_factor_w = (float)img_w / (float)YOLOV8_OB_INPUT_TENSOR_WIDTH; 
-		float scale_factor_h = (float)img_h / (float)YOLOV8_OB_INPUT_TENSOR_HEIGHT; 
+		float scale_factor_w = (float)img_w / (float)YOLOV8_OB_INPUT_TENSOR_WIDTH;
+		float scale_factor_h = (float)img_h / (float)YOLOV8_OB_INPUT_TENSOR_HEIGHT;
 		alg->obr[i].confidence = confidences[idx];
 		alg->obr[i].bbox.x = (uint32_t)(boxes[idx].x * scale_factor_w);
 		alg->obr[i].bbox.y = (uint32_t)(boxes[idx].y * scale_factor_h);
@@ -474,10 +474,10 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 	uint32_t img_w = app_get_raw_width();
     uint32_t img_h = app_get_raw_height();
 	TfLiteTensor* output = static_interpreter->output(0);
-	// init postprocessing 	
+	// init postprocessing
 	int num_classes = output->dims->data[1] - 4;
 
-	
+
 	// end init
 	///////////////////////
 	// start postprocessing
@@ -505,8 +505,8 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 	#endif
 	/***
 	 * dequantize the output result
-	 * 
-	 * 
+	 *
+	 *
 	 ******/
 	for(int dims_cnt_2 = 0; dims_cnt_2 < output->dims->data[2]; dims_cnt_2++)
 	{
@@ -516,7 +516,7 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 		for(int dims_cnt_1 = 0; dims_cnt_1 < output->dims->data[1]; dims_cnt_1++)
 		{
 			int value =  output->data.int8[ dims_cnt_2 + dims_cnt_1 * output->dims->data[2]];
-			
+
 			float deq_value = ((float) value-(float)output_zeropoint) * output_scale ;
 			if(dims_cnt_1<4)
 			{
@@ -549,7 +549,7 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 		if (maxScore >= modelScoreThreshold)
 		{
 			box bbox;
-			
+
 			bbox.x = (outputs_bbox_data[0] - (0.5 * outputs_bbox_data[2]));
 			bbox.y = (outputs_bbox_data[1] - (0.5 * outputs_bbox_data[3]));
 			bbox.w =(outputs_bbox_data[2]);
@@ -557,7 +557,7 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 			boxes.push_back(bbox);
 			class_idxs.push_back(maxClassIndex);
 			confidences.push_back(maxScore);
-			
+
 		}
 	}
 	#if YOLOV8N_OB_DBG_APP_LOG
@@ -565,7 +565,7 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 	#endif
 	/**
 	 * do nms
-	 * 
+	 *
 	 * **/
 
 	std::vector<int> nms_result;
@@ -575,8 +575,8 @@ static void yolov8_ob_post_processing(tflite::MicroInterpreter* static_interpret
 		if(!(MAX_TRACKED_YOLOV8_ALGO_RES-i))break;
 		int idx = nms_result[i];
 
-		float scale_factor_w = (float)img_w / (float)YOLOV8_OB_INPUT_TENSOR_WIDTH; 
-		float scale_factor_h = (float)img_h / (float)YOLOV8_OB_INPUT_TENSOR_HEIGHT; 
+		float scale_factor_w = (float)img_w / (float)YOLOV8_OB_INPUT_TENSOR_WIDTH;
+		float scale_factor_h = (float)img_h / (float)YOLOV8_OB_INPUT_TENSOR_HEIGHT;
 		alg->obr[i].confidence = confidences[idx];
 		alg->obr[i].bbox.x = (uint32_t)(boxes[idx].x * scale_factor_w);
 		alg->obr[i].bbox.y = (uint32_t)(boxes[idx].y * scale_factor_h);
@@ -604,8 +604,9 @@ void callback_i2c(void){
 	xprintf("I2C complete");
 }
 
-void callback_i2c_error(void){
-	xprintf("I2C error");
+void i2cs_0_tx_cb(void *param)
+{
+  xprintf("[%s] \n", __FUNCTION__);
 }
 
 int cv_yolov8n_ob_run(struct_yolov8_ob_algoResult *algoresult_yolov8n_ob) {
@@ -640,9 +641,9 @@ int cv_yolov8n_ob_run(struct_yolov8_ob_algoResult *algoresult_yolov8n_ob) {
 		                    // img_w, img_h, ch,
                         	// YOLOV8_OB_INPUT_TENSOR_WIDTH, YOLOV8_OB_INPUT_TENSOR_HEIGHT, w_scale,h_scale);
 		YUV420ToRGBRescaled((uint8_t*)raw_addr, (uint8_t*)yolov8n_ob_input->data.data,img_w, img_h,YOLOV8_OB_INPUT_TENSOR_WIDTH, YOLOV8_OB_INPUT_TENSOR_HEIGHT);
-		#ifdef EACH_STEP_TICK						
+		#ifdef EACH_STEP_TICK
 			SystemGetTick(&systick_2, &loop_cnt_2);
-			dbg_printf(DBG_LESS_INFO,"Tick for resize image BGR8U3C_to_RGB24_helium for yolov8 OB:[%d]\r\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));							
+			dbg_printf(DBG_LESS_INFO,"Tick for resize image BGR8U3C_to_RGB24_helium for yolov8 OB:[%d]\r\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));
 		#endif
 
 		#ifdef EACH_STEP_TICK
@@ -656,8 +657,8 @@ int cv_yolov8n_ob_run(struct_yolov8_ob_algoResult *algoresult_yolov8n_ob) {
 
 		#ifdef EACH_STEP_TICK
 		SystemGetTick(&systick_2, &loop_cnt_2);
-		dbg_printf(DBG_LESS_INFO,"Tick for Invoke for uint8toint8 for YOLOV8_OB:[%d]\r\n\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));    
-		#endif	
+		dbg_printf(DBG_LESS_INFO,"Tick for Invoke for uint8toint8 for YOLOV8_OB:[%d]\r\n\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));
+		#endif
 
 		#ifdef EACH_STEP_TICK
 		SystemGetTick(&systick_1, &loop_cnt_1);
@@ -679,7 +680,7 @@ int cv_yolov8n_ob_run(struct_yolov8_ob_algoResult *algoresult_yolov8n_ob) {
 			#endif
 		}
 		#ifdef EACH_STEP_TICK
-    		dbg_printf(DBG_LESS_INFO,"Tick for Invoke for YOLOV8_OB:[%d]\r\n\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));    
+    		dbg_printf(DBG_LESS_INFO,"Tick for Invoke for YOLOV8_OB:[%d]\r\n\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));
 		#endif
 
 		#ifdef EACH_STEP_TICK
@@ -689,14 +690,14 @@ int cv_yolov8n_ob_run(struct_yolov8_ob_algoResult *algoresult_yolov8n_ob) {
 		yolov8_ob_post_processing(yolov8n_ob_int_ptr,0.5, 0.45, algoresult_yolov8n_ob,el_algo);
 		#ifdef EACH_STEP_TICK
 			SystemGetTick(&systick_2, &loop_cnt_2);
-			dbg_printf(DBG_LESS_INFO,"Tick for Invoke for YOLOV8_OB_post_processing:[%d]\r\n\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));    
+			dbg_printf(DBG_LESS_INFO,"Tick for Invoke for YOLOV8_OB_post_processing:[%d]\r\n\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));
 		#endif
 		#if YOLOV8N_OB_DBG_APP_LOG
 			xprintf("yolov8_ob_post_processing done\r\n");
 		#endif
-		#ifdef TOTAL_STEP_TICK						
+		#ifdef TOTAL_STEP_TICK
 			SystemGetTick(&systick_2, &loop_cnt_2);
-			// dbg_printf(DBG_LESS_INFO,"Tick for TOTAL YOLOV8 OB:[%d]\r\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));		
+			// dbg_printf(DBG_LESS_INFO,"Tick for TOTAL YOLOV8 OB:[%d]\r\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));
 		#endif
 
 	}
@@ -714,7 +715,9 @@ int cv_yolov8n_ob_run(struct_yolov8_ob_algoResult *algoresult_yolov8n_ob) {
 	// hx_drv_i2cs_set_err_cb(USE_DW_IIC_SLV_0,(void*)callback_i2c_error);
 	std::string str = box_results_2_json_str(el_algo);
 	std::vector<unsigned char> ucharArray(str.begin(), str.end());
-	hx_drv_i2cs_interrupt_write(USE_DW_IIC_SLV_0,0x50,ucharArray.data(),box_results_2_json_str(el_algo).size(),(void*)callback_i2c);
+
+	hx_drv_i2cs_interrupt_write(USE_DW_IIC_SLV_0, 0x62, ucharArray.data(), box_results_2_json_str(el_algo).size(), (void*)i2cs_0_tx_cb);
+	// hx_drv_i2cs_interrupt_write(USE_DW_IIC_SLV_0,0x50,ucharArray.data(),,(void*)callback_i2c);
 
 #ifdef UART_SEND_ALOGO_RESEULT
 	algoresult_yolov8n_ob->algo_tick = (loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2) + capture_image_tick;
@@ -722,7 +725,7 @@ uint32_t judge_case_data;
 uint32_t g_trans_type;
 hx_drv_swreg_aon_get_appused1(&judge_case_data);
 g_trans_type = (judge_case_data>>16);
-if( g_trans_type == 0 || g_trans_type == 2)// transfer type is (UART) or (UART & SPI) 
+if( g_trans_type == 0 || g_trans_type == 2)// transfer type is (UART) or (UART & SPI)
 {
 	//invalid dcache to let uart can send the right jpeg img out
 	hx_InvalidateDCache_by_Addr((volatile void *)app_get_jpeg_addr(), sizeof(uint8_t) *app_get_jpeg_sz());
@@ -738,23 +741,23 @@ if( g_trans_type == 0 || g_trans_type == 2)// transfer type is (UART) or (UART &
 	send_device_id();
 	// event_reply(concat_strings(", ", box_results_2_json_str(el_algo), ", ", img_2_json_str(&temp_el_jpg_img)));
 	event_reply(concat_strings(", ", algo_tick_2_json_str(algoresult_yolov8n_ob->algo_tick),", ", box_results_2_json_str(el_algo), ", ", img_2_json_str(&temp_el_jpg_img)));
+	// event_reply(concat_strings(", ", algo_tick_2_json_str(algoresult_yolov8n_ob->algo_tick),", ", box_results_2_json_str(el_algo)));
 }
 	set_model_change_by_uart();
-#endif	
+#endif
 
 	SystemGetTick(&systick_1, &loop_cnt_1);
 	//recapture image
 	sensordplib_retrigger_capture();
 
-	
+
 	SystemGetTick(&systick_2, &loop_cnt_2);
-	capture_image_tick = (loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2);	
+	capture_image_tick = (loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2);
 	return ercode;
 }
 
 int cv_yolov8n_ob_deinit()
 {
-	
+
 	return 0;
 }
-

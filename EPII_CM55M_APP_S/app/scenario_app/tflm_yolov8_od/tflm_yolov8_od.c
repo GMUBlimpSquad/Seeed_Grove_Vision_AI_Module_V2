@@ -32,6 +32,7 @@
 #endif
 
 #include "WE2_device.h"
+#include "WE2_device_addr.h"
 
 #include "spi_master_protocol.h"
 #include "hx_drv_spi.h"
@@ -68,6 +69,7 @@
 #include "cvapp_yolov8n_ob.h"
 #include "memory_manage.h"
 #include "hx_drv_watchdog.h"
+#include "dev_common.h"
 
 
 #ifdef EPII_FPGA
@@ -951,8 +953,18 @@ void model_change() {
 #endif
 }
 
-void callback_i2c_error(void){
-	xprintf("I2C error");
+
+
+void i2cs_0_err_cb(void *param)
+{
+   HX_DRV_DEV_IIC *iic_obj = param;
+   HX_DRV_DEV_IIC_INFO *iic_info_ptr = &(iic_obj->iic_info);
+   HX_DRV_DEV_IIC_ERROR_STATE err_state = iic_info_ptr->err_state;
+   xprintf("[%s] err:%d \n", __FUNCTION__, err_state);
+
+   if(err_state == DEV_IIC_ERR_TX_DATA_UNREADY){
+              // I2C slave transfer old data or prepare new data
+      }
 }
 
 
@@ -990,8 +1002,10 @@ int tflm_yolov8_od_app(void) {
 
 	hx_lib_spi_eeprom_enable_XIP(USE_DW_SPI_MST_Q, true, FLASH_QUAD, true);
 
-	hx_drv_i2cs_init(USE_DW_IIC_SLV_0, 0x50);
-	hx_drv_i2cs_set_err_cb(USE_DW_IIC_SLV_0,(void*)callback_i2c_error);
+	hx_drv_i2cs_init(USE_DW_IIC_SLV_0, HX_I2C_HOST_SLV_0_BASE);
+	/* hx_drv_i2cs_set_err_cb(USE_DW_IIC_SLV_0,(void*)callback_i2c_error); */
+	hx_drv_i2cs_set_err_cb(USE_DW_IIC_0, i2cs_0_err_cb);
+
 
 	//
 // #ifdef WATCHDOG_VERSION
