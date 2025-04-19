@@ -1002,9 +1002,9 @@ int tflm_yolov8_od_app(void) {
 
 	hx_lib_spi_eeprom_enable_XIP(USE_DW_SPI_MST_Q, true, FLASH_QUAD, true);
 
-	hx_drv_i2cs_init(USE_DW_IIC_SLV_0, HX_I2C_HOST_SLV_0_BASE);
+	// hx_drv_i2cs_init(USE_DW_IIC_SLV_0, HX_I2C_HOST_SLV_0_BASE);
 	/* hx_drv_i2cs_set_err_cb(USE_DW_IIC_SLV_0,(void*)callback_i2c_error); */
-	hx_drv_i2cs_set_err_cb(USE_DW_IIC_0, i2cs_0_err_cb);
+	// hx_drv_i2cs_set_err_cb(USE_DW_IIC_0, i2cs_0_err_cb);
 
 
 	//

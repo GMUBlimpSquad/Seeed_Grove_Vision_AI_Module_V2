@@ -635,12 +635,12 @@ int cv_yolov8n_ob_run(struct_yolov8_ob_algoResult *algoresult_yolov8n_ob) {
 		w_scale = (float)(img_w - 1) / (YOLOV8_OB_INPUT_TENSOR_WIDTH - 1);
 		h_scale = (float)(img_h - 1) / (YOLOV8_OB_INPUT_TENSOR_HEIGHT - 1);
 
-		// hx_lib_image_resize_BGR8U3C_to_RGB24_helium((uint8_t*)raw_addr, (uint8_t*)yolov8n_ob_input->data.data,
+		hx_lib_image_resize_BGR8U3C_to_RGB24_helium((uint8_t*)raw_addr, (uint8_t*)yolov8n_ob_input->data.data,
 		// hx_lib_image_resize_helium((uint8_t*)raw_addr, (uint8_t*)yolov8n_ob_input->data.data,
 		// hx_lib_image_rescale_helium((uint8_t*)raw_addr, (uint8_t*)yolov8n_ob_input->data.data,
-		                    // img_w, img_h, ch,
-                        	// YOLOV8_OB_INPUT_TENSOR_WIDTH, YOLOV8_OB_INPUT_TENSOR_HEIGHT, w_scale,h_scale);
-		YUV420ToRGBRescaled((uint8_t*)raw_addr, (uint8_t*)yolov8n_ob_input->data.data,img_w, img_h,YOLOV8_OB_INPUT_TENSOR_WIDTH, YOLOV8_OB_INPUT_TENSOR_HEIGHT);
+		                    img_w, img_h, ch,
+                        	YOLOV8_OB_INPUT_TENSOR_WIDTH, YOLOV8_OB_INPUT_TENSOR_HEIGHT, w_scale,h_scale);
+		// YUV420ToRGBRescaled((uint8_t*)raw_addr, (uint8_t*)yolov8n_ob_input->data.data,img_w, img_h,YOLOV8_OB_INPUT_TENSOR_WIDTH, YOLOV8_OB_INPUT_TENSOR_HEIGHT);
 		#ifdef EACH_STEP_TICK
 			SystemGetTick(&systick_2, &loop_cnt_2);
 			dbg_printf(DBG_LESS_INFO,"Tick for resize image BGR8U3C_to_RGB24_helium for yolov8 OB:[%d]\r\n",(loop_cnt_2-loop_cnt_1)*CPU_CLK+(systick_1-systick_2));
@@ -709,14 +709,13 @@ int cv_yolov8n_ob_run(struct_yolov8_ob_algoResult *algoresult_yolov8n_ob) {
 //     .err_cb = NULL,      // No callback for errors
 //     .sta_cb = NULL       // No callback for status changes
 // };
-    xprintf("Initializing I2c");
 
 	// hx_drv_i2cs_init(USE_DW_IIC_SLV_0, 0x50);
 	// hx_drv_i2cs_set_err_cb(USE_DW_IIC_SLV_0,(void*)callback_i2c_error);
 	std::string str = box_results_2_json_str(el_algo);
 	std::vector<unsigned char> ucharArray(str.begin(), str.end());
 
-	hx_drv_i2cs_interrupt_write(USE_DW_IIC_SLV_0, 0x62, ucharArray.data(), box_results_2_json_str(el_algo).size(), (void*)i2cs_0_tx_cb);
+	// hx_drv_i2cs_interrupt_write(USE_DW_IIC_SLV_0, 0x62, ucharArray.data(), box_results_2_json_str(el_algo).size(), (void*)i2cs_0_tx_cb);
 	// hx_drv_i2cs_interrupt_write(USE_DW_IIC_SLV_0,0x50,ucharArray.data(),,(void*)callback_i2c);
 
 #ifdef UART_SEND_ALOGO_RESEULT
@@ -738,9 +737,9 @@ if( g_trans_type == 0 || g_trans_type == 2)// transfer type is (UART) or (UART &
 	temp_el_jpg_img.format = EL_PIXEL_FORMAT_JPEG;
 	temp_el_jpg_img.rotate = EL_PIXEL_ROTATE_0;
 
-	send_device_id();
+	// send_device_id();
 	// event_reply(concat_strings(", ", box_results_2_json_str(el_algo), ", ", img_2_json_str(&temp_el_jpg_img)));
-	event_reply(concat_strings(", ", algo_tick_2_json_str(algoresult_yolov8n_ob->algo_tick),", ", box_results_2_json_str(el_algo), ", ", img_2_json_str(&temp_el_jpg_img)));
+	event_reply(concat_strings(", ",  box_results_2_json_str(el_algo), ", ", img_2_json_str(&temp_el_jpg_img)));
 	// event_reply(concat_strings(", ", algo_tick_2_json_str(algoresult_yolov8n_ob->algo_tick),", ", box_results_2_json_str(el_algo)));
 }
 	set_model_change_by_uart();
